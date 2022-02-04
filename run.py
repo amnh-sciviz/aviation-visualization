@@ -14,7 +14,7 @@ from lib.math_utils import *
 
 # input
 parser = argparse.ArgumentParser()
-parser.add_argument('-lines', dest="AIRLINES_FILE", default="data/airlines.dat.csv", help="Input airlines csv file")
+parser.add_argument('-airports', dest="AIRPORTS_FILE", default="data/airports.dat.csv", help="Input airports csv file")
 parser.add_argument('-routes', dest="ROUTES_FILE", default="data/routes.dat.csv", help="Input routes csv file")
 parser.add_argument('-width', dest="WIDTH", default=4320, type=int, help="Width of video")
 parser.add_argument('-height', dest="HEIGHT", default=2160, type=int, help="Height of video")
@@ -28,7 +28,7 @@ parser.add_argument('-map', dest="OUTPUT_WITH_MAP", action="store_true", help="A
 a = parser.parse_args()
 # Parse arguments
 
-_, airlines = readCsv(a.AIRLINES_FILE)
+_, airports = readCsv(a.AIRPORTS_FILE)
 _, routes = readCsv(a.ROUTES_FILE)
 
 rows = sorted(rows, key=lambda r: r['yearorig'])
