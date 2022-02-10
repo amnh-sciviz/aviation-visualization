@@ -31,52 +31,16 @@ a = parser.parse_args()
 _, airports = readCsv(a.AIRPORTS_FILE)
 _, routes = readCsv(a.ROUTES_FILE)
 
-rows = sorted(rows, key=lambda r: r['yearorig'])
-(yearStart, yearEnd) = (rows[0]['yearorig'], rows[-1]['yearorig'])
+# pprint(airports[0])
+# pprint(routes[0])
 
-pprint(f'Time range: {yearStart}, {yearEnd}')
+for i, a in enumerate(airports):
+    lat, lon = (a['Latitude'], a['Longitude'])
+    nx, ny = (norm(lon, (-180, 180)), norm(lat, (90, -90)))
+    x, y = (nx * a.WIDTH, ny * a.HEIGHT)
 
-if a.DEBUG:
+    airports[i]['x'] = x
+    airports[i]['y'] = y
 
-    width = 1920
-    height = width/2
-    dotRadius = 6
-    img = readImage("img/map.png")
-    img = resizeImage(img, width, height, mode="warp")
-    draw = ImageDraw.Draw(img)
 
-    for row in rows:
-        lat = row['Latitude']
-        lng = row['Longitude']
-        ny = norm(lat, (90, -90))
-        nx = norm(lng, (-180, 180))
-        y = ny * height
-        x = nx * width
-        x0 = x - dotRadius
-        y0 = y - dotRadius
-        x1 = x + dotRadius
-        y1 = y + dotRadius
-        draw.ellipse((x0, y0, x1, y1), fill=(255, 0, 0))
-
-    img.save("tmp/debug.png")
-    sys.exit()
-
-template = readTextFile(a.TEMPLATE_FILE)
-
-dataStr = '';
-rowCount = len(rows)
-for i, row in enumerate(rows):
-    lat = row['Latitude']
-    lng = row['Longitude']
-    ny = norm(lat, (90, -90))
-    nx = norm(lng, (-180, 180))
-
-    year = row['yearorig']
-    nt = norm(year, (yearStart, yearEnd+1))
-
-    dataStr += f'{{x: {nx}, y: {ny}, t: {nt}}}'
-    if i < rowCount-1:
-        dataStr += ',';
-
-scriptString = template.replace('{cityData}', dataStr)
-writeTextFile(a.OUTPUT_FILE, scriptString)
+airportLookup = createLookup(airports, "Airport ID"")
