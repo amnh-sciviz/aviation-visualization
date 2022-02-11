@@ -4,11 +4,19 @@ import math
 import time
 import sys
 
+def angleBetween(x1, y1, x2, y2):
+    deltaX = x2 - x1
+    deltaY = y2 - y1
+    return math.degrees(math.atan2(deltaY, deltaX))
+
 def ceilInt(n):
     return int(math.ceil(n))
 
 def ceilToNearest(n, nearest):
     return 1.0 * math.ceil(1.0*n/nearest) * nearest
+
+def distance(x1, y1, x2, y2):
+    return math.hypot(x2 - x1, y2 - y1)
 
 def floorInt(n):
     return int(math.floor(n))
@@ -39,6 +47,9 @@ def lerp(ab, amount):
 def lim(value, ab=(0, 1)):
     a, b = ab
     return max(a, min(b, value))
+
+def midpoint(p1, p2):
+    return ((p1[0]+p2[0])/2, (p1[1]+p2[1])/2)
 
 def norm(value, ab, limit=False):
     a, b = ab

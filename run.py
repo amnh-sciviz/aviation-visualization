@@ -33,6 +33,22 @@ a = parser.parse_args()
 _, airports = readCsv(a.AIRPORTS_FILE)
 _, routes = readCsv(a.ROUTES_FILE)
 
+routes = routes[:100]
+
+# x0 = 0
+# y0 = 10
+# x1 = 1
+# y1 = 0
+# print(angleBetween(x0, y0, x1, y1))
+# print(angleBetween(x1, y1, x0, y0))
+# x0 = 0
+# y0 = 0
+# x1 = 1
+# y1 = 10
+# print(angleBetween(x0, y0, x1, y1))
+# print(angleBetween(x1, y1, x0, y0))
+# sys.exit()
+
 # pprint(airports[0])
 # pprint(routes[0])
 
@@ -50,9 +66,8 @@ w = a.WIDTH
 h = a.HEIGHT
 # baseIm = Image.new(mode="RGBA", size=(w, h), color=(0,0,0,0))
 baseIm = Image.open(a.MAP_IMAGE_FILE)
+baseIm = baseIm.convert("RGBA")
 baseIm = baseIm.resize((w, h), resample=Image.LANCZOS)
-draw = ImageDraw.Draw(baseIm)
-defaultArcHeight = h / 12
 
 # for i, airport in enumerate(airports):
 #     draw.point([airport['x'], airport['y']], fill=a.LINE_COLOR)
@@ -77,69 +92,45 @@ for i, route in enumerate(routes):
 
     fromX, fromY, toX, toY = (source["x"], source["y"], dest["x"], dest["y"])
 
+    if fromY == toY and fromX == toX:
+        print(f'Source and destination is the same for route {route["Source airport ID"]} to {route["Destination airport ID"]}')
+        continue
+
+    midX, midY = midpoint((fromX, fromY), (toX, toY))
+    radiusA = distance(fromX, fromY, midX, midY)
+    radiusB = radiusA / 2
+    padding = a.LINE_WIDTH * 2
+
+    angleBetweenPoints = 0
+    if fromY == toY:
+        angleBetweenPoints = 0
+    elif fromX < toX:
+        angleBetweenPoints = angleBetween(fromX, fromY, toX, toY)
+    elif fromX > toX:
+        angleBetweenPoints = angleBetween(toX, toY, fromX, fromY)
+    elif fromX == toX:
+        angleBetweenPoints = 90
+
     fromDegrees = 0
     toDegrees = 0
-    x0 = y0 = x1 = y1 = 0
-
-    if fromY == toY:
-        if fromX == toX:
-            print(f'Source and destination is the same for route {route["Source airport ID"]} to {route["Destination airport ID"]}')
-            continue
-
-        if fromX < toX:
-            fromDegrees = -180
-        else:
-            toDegrees = -180
-
-        x0 = min(fromX, toX)
-        x1 = max(fromX, toX)
-        y0 = fromY - defaultArcHeight
-        y1 = fromY + defaultArcHeight
-
-    elif fromX == toX:
-        if fromY < toY:
-            fromDegrees = -90
-            toDegrees = 90
-        else:
-            fromDegrees = 90
-            toDegrees = -90
-
-        y0 = min(fromY, toY)
-        y1 = max(fromY, toY)
-        x0 = fromX - defaultArcHeight
-        x1 = fromX + defaultArcHeight
-
-    elif fromY < toY:
-        y0 = fromY
-        y1 = toY + (toY-fromY)
-
-        if fromX < toX:
-            fromDegrees = -90
-            x0 = fromX - (toX - fromX)
-            x1 = toX
-        else:
-            fromDegrees = -90
-            toDegrees = -180
-            x0 = fromX
-            x1 = toX + (fromX - toX)
-
+    if fromX < toX:
+        fromDegrees = -180
     else:
-        y0 = toY
-        y1 = fromY + (fromY-toY)
+        toDegrees = -180
 
-        if fromX < toX:
-            fromDegrees = -180
-            toDegrees = -90
-            x0 = fromX
-            x1 = toX + (toX - fromX)
-
-        else:
-            toDegrees = -90
-            x0 = toX - (fromX - toX)
-            x1 = fromX
-
-
-    draw.arc([x0, y0, x1, y1], fromDegrees, toDegrees, a.LINE_COLOR, a.LINE_WIDTH)
+    x0 = padding
+    y0 = padding + (radiusA - radiusB)
+    x1 = x0 + radiusA * 2
+    y1 = y0 + radiusB * 2
+    arcImW = arcImH = roundInt(radiusA * 2 + padding * 2)
+    arcIm = Image.new(mode="RGBA", size=(arcImW, arcImH), color=(0,0,0,0))
+    arcDraw = ImageDraw.Draw(arcIm)
+    arcDraw.arc([x0, y0, x1, y1], fromDegrees, toDegrees, a.LINE_COLOR, a.LINE_WIDTH)
+    arcIm = arcIm.rotate(angle=-angleBetweenPoints)
+    arcX = roundInt(midX - arcImW * 0.5)
+    arcY = roundInt(midY - arcImH * 0.5)
+    if arcX > 0 and arcY > 0:
+        baseIm.alpha_composite(arcIm, (arcX, arcY))
 
     printProgress(i+1, routeCount)
 
