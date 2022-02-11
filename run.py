@@ -33,7 +33,7 @@ a = parser.parse_args()
 _, airports = readCsv(a.AIRPORTS_FILE)
 _, routes = readCsv(a.ROUTES_FILE)
 
-routes = routes[:100]
+routes = routes[:1000]
 
 # x0 = 0
 # y0 = 10
@@ -111,12 +111,8 @@ for i, route in enumerate(routes):
     elif fromX == toX:
         angleBetweenPoints = 90
 
-    fromDegrees = 0
+    fromDegrees = -180
     toDegrees = 0
-    if fromX < toX:
-        fromDegrees = -180
-    else:
-        toDegrees = -180
 
     x0 = padding
     y0 = padding + (radiusA - radiusB)
