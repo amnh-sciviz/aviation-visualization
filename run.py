@@ -2,7 +2,7 @@
 
 import argparse
 import os
-from PIL import Image, ImageDraw
+from PIL import Image, ImageColor, ImageDraw
 from pprint import pprint
 import sys
 import time
@@ -21,8 +21,8 @@ parser.add_argument('-height', dest="HEIGHT", default=2160, type=int, help="Heig
 parser.add_argument('-fps', dest="FRAMES_PER_SECOND", default=30, type=int, help="Frames per second of video")
 parser.add_argument('-img', dest="MAP_IMAGE_FILE", default="img/map.png", help="Background map image file")
 parser.add_argument('-color', dest="LINE_COLOR", default="#ff2e2e", help="Color of line")
-parser.add_argument('-line', dest="LINE_WIDTH", default=4, type=int, help="Width of line")
-parser.add_argument('-res', dest="RESOLUTION", default=1, type=int, help="Multiply resolution by this much")
+parser.add_argument('-line', dest="LINE_WIDTH", default=2, type=int, help="Width of line")
+parser.add_argument('-res', dest="RESOLUTION", default=2, type=int, help="Multiply resolution by this much")
 parser.add_argument('-frames', dest="OUTPUT_FRAMES", default="output/frames/", help="Output frames directory")
 parser.add_argument('-out', dest="OUTPUT_VIDEO", default="output/aviation_visualization.mp4", help="Output video if applicable (must also include -map flag)")
 parser.add_argument('-debug', dest="DEBUG", action="store_true", help="Just output debug image?")
@@ -77,7 +77,7 @@ baseIm = baseIm.resize((w, h), resample=Image.LANCZOS)
 # baseIm.save("output/debug.png")
 # sys.exit()
 
-def drawArc(fromX, fromY, toX, toY, im, progress):
+def drawArc(fromX, fromY, toX, toY, im, progress, alpha):
     global a
     global w
     global h
@@ -102,20 +102,29 @@ def drawArc(fromX, fromY, toX, toY, im, progress):
     toDegrees = 0
     isReverseDirection = (fromX > toX)
 
-    if fromY > h * 0.5 and toY > h * 0.5:
-        fromDegrees = 0
-        toDegrees = 180
-        isReverseDirection = (fromX < toX)
+    # if fromY > h * 0.5 and toY > h * 0.5:
+    #     fromDegrees = 0
+    #     toDegrees = 180
+    #     isReverseDirection = (fromX < toX)
+
+    if isReverseDirection:
+        fromDegrees = lerp((toDegrees, fromDegrees), progress)
+    else:
+        toDegrees = lerp((fromDegrees, toDegrees), progress)
 
     x0 = padding
     y0 = padding + (radiusA - radiusB)
     x1 = x0 + radiusA * 2
     y1 = y0 + radiusB * 2
     arcImW = arcImH = roundInt(radiusA * 2 + padding * 2)
+
     arcIm = Image.new(mode="RGBA", size=(arcImW, arcImH), color=(0,0,0,0))
     arcDraw = ImageDraw.Draw(arcIm)
-    arcDraw.arc([x0, y0, x1, y1], fromDegrees, toDegrees, a.LINE_COLOR, lineWidth)
+    lineColor = list(ImageColor.getrgb(a.LINE_COLOR))
+    lineColor.append(roundInt(255*alpha))
+    arcDraw.arc([x0, y0, x1, y1], fromDegrees, toDegrees, tuple(lineColor), lineWidth)
     arcIm = arcIm.rotate(angle=-angleBetweenPoints)
+
     arcX = roundInt(midX - arcImW * 0.5)
     arcY = roundInt(midY - arcImH * 0.5)
     offsetX = 0
@@ -151,10 +160,10 @@ for i, route in enumerate(routes):
         print(f'Source and destination is the same for route {route["Source airport ID"]} to {route["Destination airport ID"]}')
         continue
 
-
     deltaX = abs(fromX - toX)
+    alpha = 1.0
     if deltaX <= w*0.5:
-        drawArc(fromX, fromY, toX, toY, baseIm, progress)
+        drawArc(fromX, fromY, toX, toY, baseIm, progress, alpha)
 
     # distance is too far; go in the other direction (thus need to draw two arcs)
     else:
@@ -165,9 +174,12 @@ for i, route in enumerate(routes):
             fromX1, fromY1, toX1, toY1 = (fromX, fromY, toX+w, toY)
             fromX2, fromY2, toX2, toY2 = (fromX-w, fromY, toX, toY)
 
-        drawArc(fromX1, fromY1, toX1, toY1, baseIm, progress)
-        drawArc(fromX2, fromY2, toX2, toY2, baseIm, progress)
+        drawArc(fromX1, fromY1, toX1, toY1, baseIm, progress, alpha)
+        drawArc(fromX2, fromY2, toX2, toY2, baseIm, progress, alpha)
 
     printProgress(i+1, routeCount)
+
+if a.RESOLUTION > 1:
+    baseIm = baseIm.resize((a.WIDTH, a.HEIGHT), resample=Image.LANCZOS)
 
 baseIm.save("output/debug.png")
