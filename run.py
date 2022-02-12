@@ -11,6 +11,7 @@ from lib.collection_utils import *
 from lib.image_utils import *
 from lib.io_utils import *
 from lib.math_utils import *
+from lib.string_utils import *
 
 # input
 parser = argparse.ArgumentParser()
@@ -19,6 +20,10 @@ parser.add_argument('-routes', dest="ROUTES_FILE", default="data/routes.dat.csv"
 parser.add_argument('-width', dest="WIDTH", default=4320, type=int, help="Width of video")
 parser.add_argument('-height', dest="HEIGHT", default=2160, type=int, help="Height of video")
 parser.add_argument('-fps', dest="FRAMES_PER_SECOND", default=30, type=int, help="Frames per second of video")
+parser.add_argument('-duration', dest="DURATION", default=20, type=float, help="Target duration in seconds")
+parser.add_argument('-route_dur', dest="MAX_SECONDS_PER_ROUTE", default=4, type=float, help="Max duration of a route in seconds")
+parser.add_argument('-route_fade', dest="ROUTE_FADE_DURATION", default=1, type=float, help="Duration of a route fade in seconds")
+parser.add_argument('-count', dest="COUNT", default=10000, type=int, help="Number of routes to process")
 parser.add_argument('-img', dest="MAP_IMAGE_FILE", default="img/map.png", help="Background map image file")
 parser.add_argument('-color', dest="LINE_COLOR", default="#ff2e2e", help="Color of line")
 parser.add_argument('-line', dest="LINE_WIDTH", default=2, type=int, help="Width of line")
@@ -29,12 +34,9 @@ parser.add_argument('-debug', dest="DEBUG", action="store_true", help="Just outp
 parser.add_argument('-overwrite', dest="OVERWRITE", action="store_true", help="Overwrite existing frames?")
 parser.add_argument('-map', dest="OUTPUT_WITH_MAP", action="store_true", help="Also output video with map?")
 a = parser.parse_args()
-# Parse arguments
 
-_, airports = readCsv(a.AIRPORTS_FILE)
-_, routes = readCsv(a.ROUTES_FILE)
-
-routes = routes[:1000]
+w = a.WIDTH * a.RESOLUTION
+h = a.HEIGHT * a.RESOLUTION
 
 # x0 = 0
 # y0 = 10
@@ -48,33 +50,6 @@ routes = routes[:1000]
 # y1 = 10
 # print(angleBetween(x0, y0, x1, y1))
 # print(angleBetween(x1, y1, x0, y0))
-# sys.exit()
-
-# pprint(airports[0])
-# pprint(routes[0])
-
-w = a.WIDTH * a.RESOLUTION
-h = a.HEIGHT * a.RESOLUTION
-
-for i, airport in enumerate(airports):
-    lat, lon = (airport['Latitude'], airport['Longitude'])
-    nx, ny = (norm(lon, (-180, 180)), norm(lat, (90, -90)))
-    x, y = (nx * w, ny * h)
-
-    airports[i]['x'] = x
-    airports[i]['y'] = y
-
-airportLookup = createLookup(airports, "Airport ID")
-
-
-# baseIm = Image.new(mode="RGBA", size=(w, h), color=(0,0,0,0))
-baseIm = Image.open(a.MAP_IMAGE_FILE)
-baseIm = baseIm.convert("RGBA")
-baseIm = baseIm.resize((w, h), resample=Image.LANCZOS)
-
-# for i, airport in enumerate(airports):
-#     draw.point([airport['x'], airport['y']], fill=a.LINE_COLOR)
-# baseIm.save("output/debug.png")
 # sys.exit()
 
 def drawArc(fromX, fromY, toX, toY, im, progress, alpha):
@@ -137,49 +112,138 @@ def drawArc(fromX, fromY, toX, toY, im, progress, alpha):
         arcY = 0
     im.alpha_composite(arcIm, (arcX, arcY), (offsetX, offsetY))
 
-progress = 1
-routeCount = len(routes)
-for i, route in enumerate(routes):
-    sourceId = str(route["Source airport ID"])
-    destId = str(route["Destination airport ID"])
+def drawFrame(frame, filename, routes, withMap):
+    global a
+    global w
+    global h
 
-    if sourceId not in airportLookup:
-        print(f'Could not find {sourceId} in airports')
-        continue
-
-    if destId not in airportLookup:
-        print(f'Could not find {sourceId} in airports')
-        continue
-
-    source = airportLookup[sourceId]
-    dest = airportLookup[destId]
-
-    fromX, fromY, toX, toY = (source["x"], source["y"], dest["x"], dest["y"])
-
-    if fromY == toY and fromX == toX:
-        print(f'Source and destination is the same for route {route["Source airport ID"]} to {route["Destination airport ID"]}')
-        continue
-
-    deltaX = abs(fromX - toX)
-    alpha = 1.0
-    if deltaX <= w*0.5:
-        drawArc(fromX, fromY, toX, toY, baseIm, progress, alpha)
-
-    # distance is too far; go in the other direction (thus need to draw two arcs)
+    baseIm = None
+    if not withMap:
+        baseIm = Image.new(mode="RGBA", size=(w, h), color=(0,0,0,0))
     else:
-        fromX1, fromY1, toX1, toY1 = (fromX, fromY, toX-w, toY)
-        fromX2, fromY2, toX2, toY2 = (fromX+w, fromY, toX, toY)
+        baseIm = Image.open(a.MAP_IMAGE_FILE)
+        baseIm = baseIm.convert("RGBA")
+        baseIm = baseIm.resize((w, h), resample=Image.LANCZOS)
 
-        if fromX > toX:
-            fromX1, fromY1, toX1, toY1 = (fromX, fromY, toX+w, toY)
-            fromX2, fromY2, toX2, toY2 = (fromX-w, fromY, toX, toY)
+    # for i, airport in enumerate(airports):
+    #     draw.point([airport['x'], airport['y']], fill=a.LINE_COLOR)
+    # baseIm.save("output/debug.png")
+    # sys.exit()
 
-        drawArc(fromX1, fromY1, toX1, toY1, baseIm, progress, alpha)
-        drawArc(fromX2, fromY2, toX2, toY2, baseIm, progress, alpha)
+    routeCount = len(routes)
+    for i, route in enumerate(routes):
+        if frame < route["frameStart"] or frame > route["frameFadeEnd"]:
+            continue
 
-    printProgress(i+1, routeCount)
+        alpha = 1.0
+        if frame > route["frameFadeStart"]:
+            alpha = 1.0 - norm(frame, (route["frameFadeStart"], route["frameFadeEnd"]), limit=True)
 
-if a.RESOLUTION > 1:
-    baseIm = baseIm.resize((a.WIDTH, a.HEIGHT), resample=Image.LANCZOS)
+        progress = 1.0
+        if frame < route["frameFadeStart"]:
+            progress = norm(frame, (route["frameStart"], route["frameEnd"]), limit=True)
 
-baseIm.save("output/debug.png")
+        source = route["source"]
+        dest = route["dest"]
+        fromX, fromY, toX, toY = (source["x"], source["y"], dest["x"], dest["y"])
+
+        deltaX = abs(fromX - toX)
+
+        if deltaX <= w*0.5:
+            drawArc(fromX, fromY, toX, toY, baseIm, progress, alpha)
+
+        # distance is too far; go in the other direction (thus need to draw two arcs)
+        else:
+            fromX1, fromY1, toX1, toY1 = (fromX, fromY, toX-w, toY)
+            fromX2, fromY2, toX2, toY2 = (fromX+w, fromY, toX, toY)
+
+            if fromX > toX:
+                fromX1, fromY1, toX1, toY1 = (fromX, fromY, toX+w, toY)
+                fromX2, fromY2, toX2, toY2 = (fromX-w, fromY, toX, toY)
+
+            drawArc(fromX1, fromY1, toX1, toY1, baseIm, progress, alpha)
+            drawArc(fromX2, fromY2, toX2, toY2, baseIm, progress, alpha)
+
+    if a.RESOLUTION > 1:
+        baseIm = baseIm.resize((a.WIDTH, a.HEIGHT), resample=Image.LANCZOS)
+
+    baseIm.save(filename)
+
+def main(a):
+    _, airports = readCsv(a.AIRPORTS_FILE)
+    _, routes = readCsv(a.ROUTES_FILE)
+
+    for i, airport in enumerate(airports):
+        lat, lon = (airport['Latitude'], airport['Longitude'])
+        nx, ny = (norm(lon, (-180, 180)), norm(lat, (90, -90)))
+        x, y = (nx * w, ny * h)
+
+        airports[i]['x'] = x
+        airports[i]['y'] = y
+
+    airportLookup = createLookup(airports, "Airport ID")
+
+    # only take one direction of a route
+    routeIds = []
+    uniqueRoutes = []
+    for i, route in enumerate(routes):
+        sourceId = str(route["Source airport ID"])
+        destId = str(route["Destination airport ID"])
+
+        if sourceId not in airportLookup:
+            print(f'Could not find {sourceId} in airports')
+            continue
+
+        if destId not in airportLookup:
+            print(f'Could not find {sourceId} in airports')
+            continue
+
+        source = airportLookup[sourceId]
+        dest = airportLookup[destId]
+
+        if source["x"] == dest["x"] and source["y"] == dest["y"]:
+            print(f'Source and destination is the same for route {sourceId} to {destId}')
+            continue
+
+        route["source"] = source
+        route["dest"] = dest
+
+        id = tuple(sorted([sourceId, destId]))
+        if id not in routeIds:
+            routeIds.append(routeIds)
+            uniqueRoutes.append(route)
+
+    print(f'{len(uniqueRoutes)} unique routes')
+    routeCount = min(len(uniqueRoutes), a.COUNT)
+    print(f'{routeCount} sliced routes')
+    routes = uniqueRoutes[:routeCount]
+
+    totalFrames = a.FRAMES_PER_SECOND * a.DURATION
+    totalActiveFrames = totalFrames - a.FRAMES_PER_SECOND * a.ROUTE_FADE_DURATION
+    maxDistance = w * 0.5
+    for i, route in enumerate(routes):
+        n = i / (routeCount-1)
+        routes[i]["frameStart"] = roundInt(n * (totalActiveFrames-1))
+        routeDistance = distance(route["source"]["x"], route["source"]["y"], route["dest"]["x"], route["dest"]["y"])
+        nMaxDistance = routeDistance / maxDistance
+        routeDuration = nMaxDistance * a.MAX_SECONDS_PER_ROUTE
+        routeDurationFrames = roundInt(routeDuration * a.FRAMES_PER_SECOND)
+        routes[i]["frameEnd"] = routes[i]["frameStart"] + routeDurationFrames
+        routes[i]["frameFadeStart"] = routes[i]["frameEnd"]
+        routes[i]["frameFadeEnd"] = routes[i]["frameFadeStart"] + roundInt(a.ROUTE_FADE_DURATION * a.FRAMES_PER_SECOND)
+
+    if a.OVERWRITE:
+        removeDir(a.OUTPUT_FRAMES)
+    makeDirectories([a.OUTPUT_FRAMES, a.OUTPUT_VIDEO])
+
+    for i in range(totalFrames):
+        filename = a.OUTPUT_FRAMES + "frame." + zeroPad(i, totalFrames) + ".png"
+        drawFrame(i, filename, routes, True)
+        printProgress(i+1, totalFrames)
+
+    compileFrames(a.OUTPUT_FRAMES + "frame.%s.png", a.FRAMES_PER_SECOND, a.OUTPUT_VIDEO, len(str(totalFrames)))
+
+    # pprint(airports[0])
+    # pprint(routes[0])
+
+main(a)

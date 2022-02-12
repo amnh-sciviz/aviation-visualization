@@ -69,3 +69,7 @@ def stripTags(text):
 
 def urlEncodeString(value):
     return urllib.parse.quote_plus(value)
+
+def zeroPad(value, total):
+    padding = len(str(total))
+    return str(value).zfill(padding)
