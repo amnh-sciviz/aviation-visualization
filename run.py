@@ -22,7 +22,7 @@ parser.add_argument('-height', dest="HEIGHT", default=2160, type=int, help="Heig
 parser.add_argument('-fps', dest="FRAMES_PER_SECOND", default=30, type=int, help="Frames per second of video")
 parser.add_argument('-duration', dest="DURATION", default=20, type=float, help="Target duration in seconds")
 parser.add_argument('-route_dur', dest="MAX_SECONDS_PER_ROUTE", default=8, type=float, help="Max duration of a route in seconds")
-parser.add_argument('-route_fade', dest="ROUTE_FADE_DURATION", default=1, type=float, help="Duration of a route fade in seconds")
+parser.add_argument('-route_tail', dest="ROUTE_TAIL", default=0.5, type=float, help="How long the route tail should be as a percent of full route")
 parser.add_argument('-count', dest="COUNT", default=10000, type=int, help="Number of routes to process")
 parser.add_argument('-img', dest="MAP_IMAGE_FILE", default="img/map.png", help="Background map image file")
 parser.add_argument('-color', dest="LINE_COLOR", default="#ff2e2e", help="Color of line")
@@ -226,8 +226,9 @@ def main(a):
     print(f'{routeCount} sliced routes')
     routes = uniqueRoutes[:routeCount]
 
+    padSeconds = 2
     totalFrames = a.FRAMES_PER_SECOND * a.DURATION
-    totalActiveFrames = totalFrames - a.FRAMES_PER_SECOND * a.ROUTE_FADE_DURATION
+    totalActiveFrames = totalFrames - a.FRAMES_PER_SECOND * padSeconds
     maxDistance = w * 0.5
     for i, route in enumerate(routes):
         n = i / (routeCount-1)
@@ -237,8 +238,6 @@ def main(a):
         routeDuration = nMaxDistance * a.MAX_SECONDS_PER_ROUTE
         routeDurationFrames = roundInt(routeDuration * a.FRAMES_PER_SECOND)
         routes[i]["frameEnd"] = routes[i]["frameStart"] + routeDurationFrames
-        routes[i]["frameFadeStart"] = routes[i]["frameEnd"]
-        routes[i]["frameFadeEnd"] = routes[i]["frameFadeStart"] + roundInt(a.ROUTE_FADE_DURATION * a.FRAMES_PER_SECOND)
 
     if a.OVERWRITE:
         removeDir(a.OUTPUT_FRAMES)
