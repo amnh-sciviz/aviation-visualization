@@ -21,7 +21,7 @@ parser.add_argument('-width', dest="WIDTH", default=4320, type=int, help="Width 
 parser.add_argument('-height', dest="HEIGHT", default=2160, type=int, help="Height of video")
 parser.add_argument('-fps', dest="FRAMES_PER_SECOND", default=30, type=int, help="Frames per second of video")
 parser.add_argument('-duration', dest="DURATION", default=20, type=float, help="Target duration in seconds")
-parser.add_argument('-route_dur', dest="MAX_SECONDS_PER_ROUTE", default=4, type=float, help="Max duration of a route in seconds")
+parser.add_argument('-route_dur', dest="MAX_SECONDS_PER_ROUTE", default=8, type=float, help="Max duration of a route in seconds")
 parser.add_argument('-route_fade', dest="ROUTE_FADE_DURATION", default=1, type=float, help="Duration of a route fade in seconds")
 parser.add_argument('-count', dest="COUNT", default=10000, type=int, help="Number of routes to process")
 parser.add_argument('-img', dest="MAP_IMAGE_FILE", default="img/map.png", help="Background map image file")
@@ -30,6 +30,7 @@ parser.add_argument('-line', dest="LINE_WIDTH", default=2, type=int, help="Width
 parser.add_argument('-res', dest="RESOLUTION", default=2, type=int, help="Multiply resolution by this much")
 parser.add_argument('-frames', dest="OUTPUT_FRAMES", default="output/frames/", help="Output frames directory")
 parser.add_argument('-out', dest="OUTPUT_VIDEO", default="output/aviation_visualization.mp4", help="Output video if applicable (must also include -map flag)")
+parser.add_argument('-seed', dest="SEED", default=8, type=int, help="Seed for randomizing routes")
 parser.add_argument('-debug', dest="DEBUG", action="store_true", help="Just output debug image?")
 parser.add_argument('-overwrite', dest="OVERWRITE", action="store_true", help="Overwrite existing frames?")
 parser.add_argument('-map', dest="OUTPUT_WITH_MAP", action="store_true", help="Also output video with map?")
@@ -212,6 +213,13 @@ def main(a):
         if id not in routeIds:
             routeIds.append(routeIds)
             uniqueRoutes.append(route)
+
+    # randomize
+    seed = a.SEED
+    for i, route in enumerate(uniqueRoutes):
+        uniqueRoutes[i]['random'] = randomInt(seed=seed)
+        seed = uniqueRoutes[i]['random']
+    uniqueRoutes = sorted(uniqueRoutes, key=lambda r: r['random'])
 
     print(f'{len(uniqueRoutes)} unique routes')
     routeCount = min(len(uniqueRoutes), a.COUNT)

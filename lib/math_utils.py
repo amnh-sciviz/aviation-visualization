@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import math
+import random
 import time
 import sys
 
@@ -109,6 +110,11 @@ def printProgress(step, total, prepend=""):
     sys.stdout.write('\r')
     sys.stdout.write("%s%s%%" % (prepend, round(1.0*step/total*100,2)))
     sys.stdout.flush()
+
+def randomInt(a=0, b=1000000, seed=None):
+    if seed is not None:
+        random.seed(seed)
+    return random.randint(a, b)
 
 def roundInt(n):
     return int(round(n))
