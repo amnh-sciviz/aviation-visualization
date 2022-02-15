@@ -22,10 +22,11 @@ parser.add_argument('-height', dest="HEIGHT", default=2160, type=int, help="Heig
 parser.add_argument('-fps', dest="FRAMES_PER_SECOND", default=30, type=int, help="Frames per second of video")
 parser.add_argument('-duration', dest="DURATION", default=20, type=float, help="Target duration in seconds")
 parser.add_argument('-route_dur', dest="MAX_SECONDS_PER_ROUTE", default=8, type=float, help="Max duration of a route in seconds")
+parser.add_argument('-route_dur_min', dest="MIN_SECONDS_PER_ROUTE", default=2, type=float, help="Min duration of a route in seconds")
 parser.add_argument('-route_tail', dest="ROUTE_TAIL", default=0.5, type=float, help="How long the route tail should be as a percent of full route")
 parser.add_argument('-count', dest="COUNT", default=10000, type=int, help="Number of routes to process")
 parser.add_argument('-img', dest="MAP_IMAGE_FILE", default="img/map.png", help="Background map image file")
-parser.add_argument('-color', dest="LINE_COLOR", default="#ff2e2e", help="Color of line")
+parser.add_argument('-color', dest="LINE_COLOR", default="#b31e1e", help="Color of line")
 parser.add_argument('-line', dest="LINE_WIDTH", default=2, type=int, help="Width of line")
 parser.add_argument('-res', dest="RESOLUTION", default=2, type=int, help="Multiply resolution by this much")
 parser.add_argument('-frames', dest="OUTPUT_FRAMES", default="output/frames/", help="Output frames directory")
@@ -33,7 +34,7 @@ parser.add_argument('-out', dest="OUTPUT_VIDEO", default="output/aviation_visual
 parser.add_argument('-seed', dest="SEED", default=8, type=int, help="Seed for randomizing routes")
 parser.add_argument('-debug', dest="DEBUG", action="store_true", help="Just output debug image?")
 parser.add_argument('-overwrite', dest="OVERWRITE", action="store_true", help="Overwrite existing frames?")
-parser.add_argument('-map', dest="OUTPUT_WITH_MAP", action="store_true", help="Also output video with map?")
+parser.add_argument('-map', dest="OUTPUT_WITH_MAP", action="store_true", help="Output video with map?")
 a = parser.parse_args()
 
 w = a.WIDTH * a.RESOLUTION
@@ -53,10 +54,13 @@ h = a.HEIGHT * a.RESOLUTION
 # print(angleBetween(x1, y1, x0, y0))
 # sys.exit()
 
-def drawArc(fromX, fromY, toX, toY, im, progress, alpha):
+def drawArc(fromX, fromY, toX, toY, im, progress):
     global a
     global w
     global h
+
+    progressHead = min(progress * 2, 1.0)
+    progressTail = norm(progress, (0.5, 1.0), limit=True)
 
     midX, midY = midpoint((fromX, fromY), (toX, toY))
     radiusA = distance(fromX, fromY, midX, midY)
@@ -75,7 +79,10 @@ def drawArc(fromX, fromY, toX, toY, im, progress, alpha):
         angleBetweenPoints = 90
 
     fromDegrees = -180
+    fromDegreesInt = fromDegrees
     toDegrees = 0
+    toDegreesInt = toDegrees
+    degreesDecimal = 0
     isReverseDirection = (fromX > toX)
 
     # if fromY > h * 0.5 and toY > h * 0.5:
@@ -84,9 +91,12 @@ def drawArc(fromX, fromY, toX, toY, im, progress, alpha):
     #     isReverseDirection = (fromX < toX)
 
     if isReverseDirection:
-        fromDegrees = lerp((toDegrees, fromDegrees), progress)
+        fromDegrees = lerp((toDegrees, fromDegrees), progressHead)
+        fromDegreesInt = ceilInt(fromDegrees)
+
     else:
-        toDegrees = lerp((fromDegrees, toDegrees), progress)
+        toDegrees = lerp((fromDegrees, toDegrees), progressHead)
+        toDegreesInt = floorInt(toDegrees)
 
     x0 = padding
     y0 = padding + (radiusA - radiusB)
@@ -97,8 +107,26 @@ def drawArc(fromX, fromY, toX, toY, im, progress, alpha):
     arcIm = Image.new(mode="RGBA", size=(arcImW, arcImH), color=(0,0,0,0))
     arcDraw = ImageDraw.Draw(arcIm)
     lineColor = list(ImageColor.getrgb(a.LINE_COLOR))
-    lineColor.append(roundInt(255*alpha))
-    arcDraw.arc([x0, y0, x1, y1], fromDegrees, toDegrees, tuple(lineColor), lineWidth)
+
+    totalDegrees = ceilInt(abs(toDegrees - fromDegrees))
+    for i in range(totalDegrees):
+        progressDegrees = 1.0 - i / 179
+        toDegreesPartial = ceilInt(toDegrees) - i
+        fromDegreesPartial = toDegreesPartial - 1
+        if i == 0:
+            toDegreesPartial = toDegrees
+
+        if isReverseDirection:
+            fromDegreesPartial = floorInt(fromDegrees) + i
+            toDegreesPartial = fromDegreesPartial + 1
+            if i == 0:
+                fromDegreesPartial = fromDegrees
+
+        alpha = roundInt(progressDegrees * (1.0 - progressTail) * 255)
+        lineColorWithAlpha = tuple(lineColor + [alpha])
+
+        arcDraw.arc([x0, y0, x1, y1], fromDegreesPartial, toDegreesPartial, lineColorWithAlpha, lineWidth)
+
     arcIm = arcIm.rotate(angle=-angleBetweenPoints)
 
     arcX = roundInt(midX - arcImW * 0.5)
@@ -118,6 +146,9 @@ def drawFrame(frame, filename, routes, withMap):
     global w
     global h
 
+    if not a.OVERWRITE and os.path.isfile(filename):
+        return
+
     baseIm = None
     if not withMap:
         baseIm = Image.new(mode="RGBA", size=(w, h), color=(0,0,0,0))
@@ -133,16 +164,10 @@ def drawFrame(frame, filename, routes, withMap):
 
     routeCount = len(routes)
     for i, route in enumerate(routes):
-        if frame < route["frameStart"] or frame > route["frameFadeEnd"]:
+        if frame < route["frameStart"] or frame > route["frameEnd"]:
             continue
 
-        alpha = 1.0
-        if frame > route["frameFadeStart"]:
-            alpha = 1.0 - norm(frame, (route["frameFadeStart"], route["frameFadeEnd"]), limit=True)
-
-        progress = 1.0
-        if frame < route["frameFadeStart"]:
-            progress = norm(frame, (route["frameStart"], route["frameEnd"]), limit=True)
+        progress = norm(frame, (route["frameStart"], route["frameEnd"]), limit=True)
 
         source = route["source"]
         dest = route["dest"]
@@ -151,7 +176,7 @@ def drawFrame(frame, filename, routes, withMap):
         deltaX = abs(fromX - toX)
 
         if deltaX <= w*0.5:
-            drawArc(fromX, fromY, toX, toY, baseIm, progress, alpha)
+            drawArc(fromX, fromY, toX, toY, baseIm, progress)
 
         # distance is too far; go in the other direction (thus need to draw two arcs)
         else:
@@ -162,8 +187,8 @@ def drawFrame(frame, filename, routes, withMap):
                 fromX1, fromY1, toX1, toY1 = (fromX, fromY, toX+w, toY)
                 fromX2, fromY2, toX2, toY2 = (fromX-w, fromY, toX, toY)
 
-            drawArc(fromX1, fromY1, toX1, toY1, baseIm, progress, alpha)
-            drawArc(fromX2, fromY2, toX2, toY2, baseIm, progress, alpha)
+            drawArc(fromX1, fromY1, toX1, toY1, baseIm, progress)
+            drawArc(fromX2, fromY2, toX2, toY2, baseIm, progress)
 
     if a.RESOLUTION > 1:
         baseIm = baseIm.resize((a.WIDTH, a.HEIGHT), resample=Image.LANCZOS)
@@ -235,7 +260,7 @@ def main(a):
         routes[i]["frameStart"] = roundInt(n * (totalActiveFrames-1))
         routeDistance = distance(route["source"]["x"], route["source"]["y"], route["dest"]["x"], route["dest"]["y"])
         nMaxDistance = routeDistance / maxDistance
-        routeDuration = nMaxDistance * a.MAX_SECONDS_PER_ROUTE
+        routeDuration = max(nMaxDistance * a.MAX_SECONDS_PER_ROUTE, a.MIN_SECONDS_PER_ROUTE)
         routeDurationFrames = roundInt(routeDuration * a.FRAMES_PER_SECOND)
         routes[i]["frameEnd"] = routes[i]["frameStart"] + routeDurationFrames
 
@@ -245,10 +270,11 @@ def main(a):
 
     for i in range(totalFrames):
         filename = a.OUTPUT_FRAMES + "frame." + zeroPad(i, totalFrames) + ".png"
-        drawFrame(i, filename, routes, True)
+        drawFrame(i, filename, routes, withMap=a.OUTPUT_WITH_MAP)
         printProgress(i+1, totalFrames)
 
-    compileFrames(a.OUTPUT_FRAMES + "frame.%s.png", a.FRAMES_PER_SECOND, a.OUTPUT_VIDEO, len(str(totalFrames)))
+    if a.OUTPUT_WITH_MAP:
+        compileFrames(a.OUTPUT_FRAMES + "frame.%s.png", a.FRAMES_PER_SECOND, a.OUTPUT_VIDEO, len(str(totalFrames)))
 
     # pprint(airports[0])
     # pprint(routes[0])
